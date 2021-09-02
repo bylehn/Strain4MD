@@ -1,0 +1,39 @@
+####################
+strain-analysis.py #
+####################
+
+# this script runs on Python3, and besides numpy, scipy, and matplotlib, you need MDAnalysis, which comes with Anaconda3 distribution
+# You need trajectories in gromacs xtc format, which can easily be done with cpptraj by entering  line "trajout traj.xtc" which will 
+# automatically convert the amber trajectory to gromacs xtc trajectory. You also need a pdb file of e.g. the first frame of the simulation.
+# A gro file will also work if you change pdb to gro under input parameters section in the script, but for now pdb is hardcoded.
+
+#  Run the script by typing:
+# "python strain-analysis.py 'input-filename-ref' 'input-filename-deform'  'output-filenames' 'atom-selection' 'cutoff' 'stride-reference' 'stride-deformed'
+# where 'input-filename-ref' = filename of the input pdb and xtc that you use as reference structure (pdb and xtc must have same name, and exclude the extension)
+# 'input-filename-deform' = same as above but for deformed state (e.g. protein+ligand)
+# 'atom-selection' = which atoms should be included in analysis. Usually C-alphas are enough, more will take loooong time depending on system size and length of simulation
+# the terminology of atom selection follows MDAnalaysis nomenclature (similar to VMD)
+# 'output-filenames' = name of the output files that you want.
+# 'cutoff' = Cutoff for strain calculation
+# 'stride-reference' = Use every nth frame for strain calculation from the reference trajectory
+# 'stride-deformed' = Use every nth frame for strain calculation from the deformed state trajectory
+ 
+
+# EXAMPLE
+# I have two trajectories, one with adenine and one with ebselen on a protein
+# reference: rna-adenine.pdb, rna-adenine.xtc
+# deformed: rna-ebselen.pdb, rna-ebselen.xtc
+# atom_selection: "name CA and resid 1-1006" (all C-alphas of residues 1-1006)
+# output_filenames: rna  (will simply call them rna)
+ 
+
+# Command line: python strain-analysis.py 'rna-adenine' 'rna-remdesivir' 'rna' "name CA and resid 1-1006" 10 100 100
+
+#OUTPUT
+# rna_bar.svg: bar chart of the distribution of strain values, usually a Gaussian with a long tail towards higher strain values
+# rna_strain.svg: figure of strain-per-residue, where  strain on y-axis and residue number on x-axis. 
+# rna_strain.dat: text file with  strain-per-residue, to be used for further visualization.
+# rna_strain_loaduser.dat: text file with strains in a single line, this is pretty useless so you can ignore this; it played a role in earlier versions of this script.
+# strain.log: log file which you can use to track progress of analysis in terms of %, this is created as soon as 1% of analysis is done, so can check this regularly
+
+
