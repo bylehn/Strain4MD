@@ -2,6 +2,12 @@
 strain-analysis.py #
 ####################
 
+# If using this script, please cite:
+# Menéndez, C. A., Byléhn, F., Perez-Lemus, G. R., Alvarado, W., & de Pablo, J. J. (2020).
+# Molecular characterization of ebselen binding activity to SARS-CoV-2 main protease. Science Advances, 6(37), eabd0345.
+
+
+
 # this script runs on Python3, and besides numpy, scipy, and matplotlib, you need MDAnalysis, which comes with Anaconda3 distribution
 # You need trajectories in gromacs xtc format, which can easily be done with cpptraj by entering  line "trajout traj.xtc" which will 
 # automatically convert the amber trajectory to gromacs xtc trajectory. You also need a pdb file of e.g. the first frame of the simulation.
