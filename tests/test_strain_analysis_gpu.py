@@ -1,0 +1,2 @@
+import pytest
+from src.strain_analysis_gpu import compute_strain_tensor
