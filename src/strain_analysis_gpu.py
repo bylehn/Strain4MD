@@ -13,12 +13,12 @@ R = 10
 stride = 10
 residue_numbers = list(range(307, 398))
 #residue_numbers = [29]
-reference = 'cript_wt_b1us.pdb'
-deformed = 'cript_g330t_b1us.pdb'
-traj_ref = 'cript_wt_b1us.xtc'
-traj_deformed = 'cript_g330t_b1us.xtc'
-out = 'cript_wt_g330t'
-protein_ca = '(name CA and resid 7-98)'
+reference = '../examples/cript_wt_b1us.pdb'
+deformed = '../examples/cript_g330t_b1us.pdb'
+traj_ref = '../examples/cript_wt_b1us.xtc'
+traj_deformed = '../examples/cript_g330t_b1us.xtc'
+out = '../examples/cript_wt_g330t'
+protein_ca = '(name CA and resid 307-398)'
 
 
 # %%
@@ -41,86 +41,109 @@ def initialize(reference, deformed, traj_ref, traj_deformed, residue_numbers, pr
     """Initialize the reference and deformed selections."""
     ref = mda.Universe(reference, traj_ref)
     defm = mda.Universe(deformed, traj_deformed)
-    ref_selections = []
-    defm_selections = []
+    selections = []
 
     # Iterate over residue numbers to create selection strings
     for resid in residue_numbers:
         selection_str = f"({protein_ca} and around {R} (resid {resid} and name CA))"
         center_str = f"resid {resid} and name CA"
 
-        ref_sel = ref.select_atoms(selection_str)
-        defm_sel = defm.select_atoms(selection_str)
-
+        ref_selection = ref.select_atoms(selection_str)
         ref_center = ref.select_atoms(center_str)
-        defm_center = defm.select_atoms(center_str)
 
-        if len(ref_sel) != len(defm_sel):
-            raise ValueError("The number of atoms in reference and deformed selections do not match.")
-        
-        ref_selections.append((ref_sel, ref_center))
-        defm_selections.append((defm_sel, defm_center))
+         # Get residue numbers from the reference selection
+        ref_resids = ref_selection.resids
+        defm_selection_str = f"(name CA and resid {' '.join(map(str, ref_resids))})"
+        defm_center_str = f"resid {resid} and name CA" 
 
-    return ref, ref_selections, defm_selections
+        defm_selection = defm.select_atoms(defm_selection_str)
+        defm_center = defm.select_atoms(defm_center_str)
 
-def process_frame(ref, ref_selections, defm_selections, stride):
+        selections.append(((ref_selection, ref_center), (defm_selection, defm_center)))
+
+    return ref, defm, selections
+
+def process_frame(ref, defm, selections, frame):
     """Process frames and calculate strains."""
     shear_strains = []
     principal_strains = []
 
-    for ts in ref.trajectory[::stride]:  # Process every 'stride' frames
-        frame_shear = []
-        frame_principal = []
+    frame_shear = []
+    frame_principal = []
 
-        for (ref_sel, ref_center), (defm_sel, defm_center) in zip(ref_selections, defm_selections):
-            A = ref_sel.positions - ref_center.positions[0]
-            B = defm_sel.positions - defm_center.positions[0]
-            Q = compute_strain_tensor(device_put(A), device_put(B))
-            shear, principal = compute_principal_strains_and_shear(Q)
-            frame_shear.append(shear.tolist())
-            frame_principal.append(principal.tolist())
-        shear_strains.append(frame_shear)
-        principal_strains.append(frame_principal)
+    ref.trajectory[frame]
+    defm.trajectory[frame]
+    # if you want to add pairwise comparison between frames, add another loop here with 
+    # for frame in zip(ref.trajectory, defm.trajectory) or something like that:
+    for ((ref_sel, ref_center), (defm_sel, defm_center)) in selections:
+        A = ref_sel.positions - ref_center.positions[0]
+        B = defm_sel.positions - defm_center.positions[0]
+
+        Q = compute_strain_tensor(device_put(A), device_put(B))
+        shear, principal = compute_principal_strains_and_shear(Q)
+        frame_shear.append(shear.tolist())
+        frame_principal.append(principal.tolist())
+    shear_strains.append(frame_shear)
+    principal_strains.append(frame_principal)
 
     return np.array(shear_strains), np.array(principal_strains)
 
-def write_files(shear_strains, principal_strains):
-    # Write shear strains to file
-    with open('shear_strains.txt', 'w') as f_shear:
-        for i, shear in enumerate(shear_strains):
-            f_shear.write(f'{i+1} ')
-            f_shear.write(' '.join([str(s) for s in shear]))
-            f_shear.write('\n')
+def write_files(shear_strains, principal_strains, avg_shear_strains, avg_principal_strains):
+    # Calculate averages
 
-    # Write principal strains to file
-    with open('principal_1.txt', 'w') as f_principal:
-        for i, principal in enumerate(principal_strains):
-            f_principal.write(f'{i+1} ')
-            f_principal.write(' '.join([str(p[0]) for p in principal]))
-            f_principal.write('\n')
 
-    # Write principal strains to file
-    with open('principal_2.txt', 'w') as f_principal:
-        for i, principal in enumerate(principal_strains):
-            f_principal.write(f'{i+1} ')
-            f_principal.write(' '.join([str(p[1]) for p in principal]))
-            f_principal.write('\n')
+    # Write average shear strains to file
+    with open('avg_shear_strains.txt', 'w') as f_shear:
+        for i, avg_shear in enumerate(avg_shear_strains):
+            f_shear.write(f'Residue {i+1}: {avg_shear:.4f}\n')
 
-    # Write principal strains to file
-    with open('principal_3.txt', 'w') as f_principal:
-        for i, principal in enumerate(principal_strains):
-            f_principal.write(f'{i+1} ')
-            f_principal.write(' '.join([str(p[2]) for p in principal]))
-            f_principal.write('\n')
+    # Write average principal strains for each component
+    for component in range(3):  # Assuming 3 principal components
+        with open(f'avg_principal_{component+1}.txt', 'w') as f_principal:
+            for i, principal in enumerate(avg_principal_strains):
+                f_principal.write(f'Residue {i+1}: {principal[component]:.4f}\n')
+
+    # Write raw shear strains
+    with open('raw_shear_strains.txt', 'w') as f_raw_shear:
+        for frame in shear_strains:
+            f_raw_shear.write(' '.join(map(lambda x: f'{x:.4f}', frame)) + '\n')
+
+    # Write raw principal strains for each component
+    for component in range(3):
+        with open(f'raw_principal_{component+1}.txt', 'w') as f_raw_principal:
+            for frame in principal_strains:
+                f_raw_principal.write(' '.join(map(lambda x: f'{x[component]:.4f}', frame)) + '\n')
 
 # %%
-# Initialize the reference and deformed selections
-ref_positions, ref_positions_center, deformed_selection, deformed_centers, deformed = initialize(reference, deformed, residue_numbers, protein_ca, traj)
+def write_pdb_with_strains(deformed_pdb, avg_shear_strains, avg_principal_strains, output_filename):
+    # Load the deformed PDB structure
+    u = mda.Universe(deformed_pdb)
+    residue_selection_string = "resid " + " ".join(map(str, residue_numbers))
+    selected_residues = u.select_atoms(residue_selection_string)
+    # Initialize a PDB writer for multiple frames
+    with mda.Writer(output_filename, multiframe=True, bonds=None, n_atoms=u.atoms.n_atoms) as PDB:
+        # Frame 1: Average Shear Strains
+        for residue in u.residues:
+            if residue.resid in selected_residues.resids:
+                ca_atom = residue.atoms.select_atoms('name CA')
+                if ca_atom:  # Check if CA atom exists
+                    ca_atom.tempfactors = 100 * avg_shear_strains[residue.resid - 307]  # Adjust index based on starting residue
+        PDB.write(u.atoms)  # Write first frame
+
+        # Next 3 Frames: Principal Strains
+        for component in range(3):  # Assuming 3 principal components
+            for residue in u.residues:
+                if residue.resid in selected_residues.resids:
+                    ca_atom = residue.atoms.select_atoms('name CA')
+                    if ca_atom:  # Check if CA atom exists
+                        # Assign principal strain component to B-factor
+                        ca_atom.tempfactors = avg_principal_strains[residue.resid - 307, component]
+            PDB.write(u.atoms)  # Write each principal component frame
 
 # %%
-def main(reference, deformed, traj_ref, traj_deformed, residue_numbers, protein_ca, R, stride):
+def main(reference, deformed, traj_ref, traj_defm, residue_numbers, protein_ca, R, stride):
     # Initialize
-    ref, ref_selections, defm_selections = initialize(reference, deformed, traj_ref, traj_deformed, residue_numbers, protein_ca, R, stride)
+    ref, defm, selections = initialize(reference, deformed, traj_ref, traj_defm, residue_numbers, protein_ca, R, stride)
 
     start_time = time.time()
 
@@ -130,14 +153,13 @@ def main(reference, deformed, traj_ref, traj_deformed, residue_numbers, protein_
 
     # Iterate over the trajectory in batches
     num_frames = len(ref.trajectory[::stride])
-    batch_size = 1000  # Set your batch size based on GPU memory capacity
+    batch_size = 1  # Set your batch size based on GPU memory capacity
 
     for batch_start in range(0, num_frames, batch_size):
         batch_end = min(batch_start + batch_size, num_frames)
         for frame_idx in range(batch_start, batch_end):
             actual_frame_idx = frame_idx * stride
-            ref.trajectory[actual_frame_idx]  # Load the frame
-            frame_shear, frame_principal = process_frame(ref, ref_selections, defm_selections, stride)
+            frame_shear, frame_principal = process_frame(ref, defm, selections, actual_frame_idx)
             shear_strains.extend(frame_shear)
             principal_strains.extend(frame_principal)
     
@@ -148,7 +170,15 @@ def main(reference, deformed, traj_ref, traj_deformed, residue_numbers, protein_
     end = time.time()
     print(f'Time elapsed: {end - start_time} s')
 
-    write_files(shear_strains, principal_strains)
+    avg_shear_strains = np.mean(shear_strains, axis=0)
+    avg_principal_strains = np.mean(principal_strains, axis=0)
+    write_files(shear_strains, principal_strains, avg_shear_strains, avg_principal_strains)
+    write_pdb_with_strains(deformed, avg_shear_strains, avg_principal_strains, out + '.pdb')
+
+    return shear_strains, principal_strains
 
 # %%
-main(reference, deformed, traj_ref, traj_deformed, residue_numbers, protein_ca, R, stride)
+shear_strains, principal_strains = main(reference, deformed, traj_ref, traj_deformed, residue_numbers, protein_ca, R, stride)
+
+
+# %%
